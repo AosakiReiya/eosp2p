@@ -1,5 +1,6 @@
 package io.szktas.eos.mixin;
 
+import io.szktas.eos.Client.DomainResolver;
 import io.szktas.eos.Client.IServerAddress;
 import io.szktas.eos.EOSBinder.EOSNative;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
@@ -18,7 +19,12 @@ public class MixinServerAddress implements IServerAddress {
     private static void injectValidCheck(String pHostAndPort, CallbackInfoReturnable<Boolean> cir) {
         if (!EOSNative.isCanUse()) return;
         if (pHostAndPort.toLowerCase().startsWith("eos:")) {
-            cir.setReturnValue(EOSNative.decodeConnectionKey(pHostAndPort.substring(4)) != null);
+            String rbuf = pHostAndPort.substring(4);
+            if (EOSNative.decodeConnectionKey(rbuf) != null) {
+                cir.setReturnValue(true);
+            } else {
+                cir.setReturnValue(DomainResolver.isValidDomain(rbuf));
+            }
             cir.cancel();
         }
     }
@@ -35,8 +41,15 @@ public class MixinServerAddress implements IServerAddress {
             String rbuf = pIp.substring(4);
             String[] buff = EOSNative.decodeConnectionKey(rbuf);
             if (buff == null) {
+                String base64Key = DomainResolver.resolveDomain(rbuf);
+                if (base64Key != null) {
+                    buff = EOSNative.decodeConnectionKey(base64Key);
+                }
+            }
+            if (buff == null) {
                 cir.setReturnValue(INVALID);
                 cir.cancel();
+                return;
             }
             ServerAddress dummy = new ServerAddress("server.eos", 0);
             IServerAddress inj = (IServerAddress) (Object) dummy;

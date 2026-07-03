@@ -1,6 +1,8 @@
 package io.szktas.eos.Event;
 
 import io.szktas.eos.Client.Gui.HintGui;
+import io.szktas.eos.Config;
+import io.szktas.eos.DDNS.CloudflareUpdater;
 import io.szktas.eos.EOSBinder.EOSNative;
 import io.szktas.eos.EOSBinder.PacketConsumer;
 import io.szktas.eos.Main;
@@ -120,6 +122,21 @@ public class FMLCommonSetupHandler {
                         }
                     }
                 });
+
+                // Cloudflare DDNS: update TXT record with current EOS connection key
+                if (Config.CLOUDFLARE_ENABLED.get()) {
+                    String key = EOSNative.getConnectionKey();
+                    if (key != null) {
+                        executor.submit(() -> CloudflareUpdater.updateRecord(
+                                Config.CLOUDFLARE_API_TOKEN.get(),
+                                Config.CLOUDFLARE_ZONE_ID.get(),
+                                Config.CLOUDFLARE_DDNS_RECORD.get(),
+                                key
+                        ));
+                    } else {
+                        LOGGER.warn("Cloudflare DDNS: connection key is null, cannot update");
+                    }
+                }
             }, () -> {
                 IsRunningEOS = false;
                 LOGGER.error("Get PUID Failed, EOS shutdown");

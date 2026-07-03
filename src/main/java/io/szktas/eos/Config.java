@@ -83,5 +83,22 @@ public class Config
             .comment("Show hint on launch if any error occurs")
             .define("hint_on_launch", true);
 
+    // Cloudflare DDNS Configuration
+    public static final ForgeConfigSpec.BooleanValue CLOUDFLARE_ENABLED = BUILDER
+            .comment("Enable Cloudflare DDNS: automatically update TXT record with EOS connection key")
+            .define("cloudflare.enabled", false);
+
+    public static final ForgeConfigSpec.ConfigValue<String> CLOUDFLARE_API_TOKEN = BUILDER
+            .comment("Cloudflare API Token (needs DNS:Edit permission)")
+            .define("cloudflare.api_token", "");
+
+    public static final ForgeConfigSpec.ConfigValue<String> CLOUDFLARE_ZONE_ID = BUILDER
+            .comment("Cloudflare Zone ID for the domain")
+            .define("cloudflare.zone_id", "");
+
+    public static final ForgeConfigSpec.ConfigValue<String> CLOUDFLARE_DDNS_RECORD = BUILDER
+            .comment("DNS record name to update, e.g. _eos.example.com")
+            .define("cloudflare.ddns_record", "");
+
     static final ForgeConfigSpec SPEC = BUILDER.build();
 }
