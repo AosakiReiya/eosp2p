@@ -30,8 +30,10 @@ public class DomainResolver {
     private record CachedEntry(String key, long timestamp) {}
 
     public static String resolveDomain(String domain) {
-        String txtName = "_eos." + domain;
+        return resolveTxtRecord(domain);
+    }
 
+    private static String resolveTxtRecord(String txtName) {
         CachedEntry cached = cache.get(txtName);
         if (cached != null && System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS) {
             LOGGER.debug("DomainResolver: cache hit for {}", txtName);
