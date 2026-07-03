@@ -17,6 +17,9 @@ _*_ Android is not supported due to technical issues
 ## Client
 ### Joining
 If the mod successfully loaded and operate, input a connection address with correct format will both works as like normal server address in "Add Server" and "Direct Connection"
+
+Domain address format `EOS:yourdomain.com` is also supported — the client resolves the EOS connection key by querying the domain's TXT record via DNS-over-HTTPS (multi-provider fallback).
+
 ![Direct Connection](https://cdn.modrinth.com/data/cached_images/c7b86033211eb01c02796a5497aa2cd935b475d1.png)
 ![Add Server](https://cdn.modrinth.com/data/cached_images/87bbab8059e6d404e9d3e86bfb73eba5977f11fb.png)
 ### Hosting
@@ -30,6 +33,21 @@ The connection address through P2P will be printed just after "Start serving on.
 The following commands works on both dedicated server and client.
 - `/eosp2p status`: Show if mod operates or not, with reason.
 - `/eosp2p eosaddress`: Show the connection address of the current world. Error thrown if not yet published.
+- `/eosp2p ddns update`: Manually push current EOS connection key to Cloudflare DNS TXT record.
+- `/eosp2p ddns status`: Show last DDNS update time and current key.
+
+# Cloudflare DDNS
+The server can automatically update a DNS TXT record with its EOS connection key.
+
+## Configuration (`config/eosp2p-server.toml`)
+- `cloudflare.enabled`: Enable DDNS (default: false)
+- `cloudflare.api_token`: Cloudflare API Token (needs DNS:Edit permission)
+- `cloudflare.zone_id`: Cloudflare Zone UUID (not domain name)
+- `cloudflare.ddns_record`: TXT record name, e.g. `eosmc.example.com`
+
+The mod writes a TXT record with value `eos-v1=<base64key>` to Cloudflare on server start (or manual trigger via `/eosp2p ddns update`).
+
+Players can then connect using `EOS:eosmc.example.com` — the client queries the domain's TXT record to obtain the connection key automatically.
 
 # Known Issues (that I failed to solve)
 - Frequent connect and disconnect may causes issues.

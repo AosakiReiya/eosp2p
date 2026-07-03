@@ -80,11 +80,13 @@ public class MixinConnection {
         EosP2PChannel chan = eosp2p$clientChannelMap.get(Remote);
         if (chan != null) {
             if (!chan.isOpen()) {
-                LOGGER.debug("Try to kill connection");
+                LOGGER.debug("Removing stale connection, creating new one");
                 EOSNative.close(PUID, EOSAddressRaw.PUID, EOSAddressRaw.SocketID);
+                eosp2p$clientChannelMap.remove(Remote);
+            } else {
+                LOGGER.debug("Return existing con");
+                return chan.newSucceededFuture();
             }
-            LOGGER.debug("Return existing con");
-            return chan.newSucceededFuture();
         }
 
         ChannelFuture tryWaiting = eosp2p$waitingList.get(Remote);
