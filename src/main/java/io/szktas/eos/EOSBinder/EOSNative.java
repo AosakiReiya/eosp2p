@@ -238,6 +238,10 @@ public class EOSNative {
     private static final AtomicBoolean isPUIDInit = new AtomicBoolean(false);
     public static String PUID = null;
 
+    public static void resetPUIDInit() {
+        isPUIDInit.set(false);
+    }
+
     public static void getPUID(Consumer<String> resolve, Runnable reject) {
         if (isPUIDInit.compareAndSet(false, true)) {
             IKeySupplier provider = DistExecutor.safeRunForDist(

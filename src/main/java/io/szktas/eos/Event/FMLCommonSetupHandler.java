@@ -79,83 +79,7 @@ public class FMLCommonSetupHandler {
                     }
                 }
             }, 0, 15, TimeUnit.SECONDS);
-            EOSNative.getPUID((puid) -> {
-                LOGGER.debug("Get PUID: {}", puid);
-                subscribeIncomingConnectionRequestHandler((local, remote, name) ->
-                        EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectIncoming(local, remote, name))));
-                if (!subscribeIncomingConnectionRequest(puid, null)) {
-                    LOGGER.error("Failed to subscribe");
-                    IsRunningEOS = false;
-                    reasonEOS = ReasonEOS.SUBSCRIBE_INCOMING_CONNECTION_FAILED;
-                    return;
-                }
-                subscribeEstablishedConnectionRequestHandler((local, remote, name) ->
-                        EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectEstablished(local, remote, name))));
-                if (!subscribeEstablishedConnectionRequest(puid, null)) {
-                    LOGGER.error("Failed to subscribe");
-                    IsRunningEOS = false;
-                    reasonEOS = ReasonEOS.SUBSCRIBE_ESTABLISHED_CONNECTION_FAILED;
-                    return;
-                }
-                subscribeInterruptConnectionRequestHandler((local, remote, name) ->
-                        EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectInterrupt(local, remote, name))));
-                if (!subscribeInterruptConnectionRequest(puid, null)) {
-                    LOGGER.error("Failed to subscribe");
-                    IsRunningEOS = false;
-                    reasonEOS = ReasonEOS.SUBSCRIBE_INTERRUPT_CONNECTION_FAILED;
-                    return;
-                }
-                subscribeCloseConnectionRequestHandler((local, remote, name, reason) ->
-                        EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectClose(local, remote, name, reason))));
-                if (!subscribeCloseConnectionRequest(puid, null)) {
-                    LOGGER.error("Failed to subscribe");
-                    IsRunningEOS = false;
-                    reasonEOS = ReasonEOS.SUBSCRIBE_CLOSE_CONNECTION_FAILED;
-                    return;
-                }
-                registerReceiveCallbackFor(puid, (rid, sid, cid, data) -> {
-                    ConnectionKey key = new ConnectionKey(rid, sid, cid);
-                    @Nullable Set<PacketHandler> handlers = NetworkUtil.DATA_CALLBACKS.get(key);
-                    if (handlers != null) {
-                        for (PacketHandler handler: handlers) {
-                            handler.accept(data);
-                        }
-                    }
-                });
-
-                // Cloudflare DDNS: update TXT record with current EOS connection key
-                if (Config.CLOUDFLARE_ENABLED.get()) {
-                    String key = EOSNative.getConnectionKey();
-                    if (key != null) {
-                        executor.submit(() -> CloudflareUpdater.updateRecord(
-                                Config.CLOUDFLARE_API_TOKEN.get(),
-                                Config.CLOUDFLARE_ZONE_ID.get(),
-                                Config.CLOUDFLARE_DDNS_RECORD.get(),
-                                key
-                        ));
-                    } else {
-                        LOGGER.warn("Cloudflare DDNS: connection key is null, cannot update");
-                    }
-                }
-            }, () -> {
-                IsRunningEOS = false;
-                LOGGER.error("Get PUID Failed, EOS shutdown");
-                if (SystemUtils.IS_OS_MAC) {
-                    SET_ERROR_SCREEN.set(
-                            Component.translatable("gui.eosp2p." + reasonEOS.name().toLowerCase()),
-                            Component.translatable("gui.eosp2p.puid_fail_mac", Component.translatable("gui.eosp2p.puid_fail")),
-                            Component.translatable("gui.eosp2p.dismiss_ever"),
-                            Component.translatable("gui.eosp2p.dismiss")
-                    );
-                } else {
-                    SET_ERROR_SCREEN.set(
-                            Component.translatable("gui.eosp2p." + reasonEOS.name().toLowerCase()),
-                            Component.translatable("gui.eosp2p.puid_fail"),
-                            Component.translatable("gui.eosp2p.dismiss_ever"),
-                            Component.translatable("gui.eosp2p.dismiss")
-                    );
-                }
-            });
+            fetchPUIDWithRetry(3);
         }, (ret) -> {
             if (ret > 0) {
                 LOGGER.error("Failed to initialize connection handle, reason: {}", EOSNative.reasonEOS.name());
@@ -167,6 +91,97 @@ public class FMLCommonSetupHandler {
                 if (EOSNative.reasonEOS != null) {
                     LOGGER.error(EOSNative.reasonEOS.name());
                 }
+            }
+        });
+    }
+
+    private static void onPUIDSuccess(String puid) {
+        LOGGER.debug("Get PUID: {}", puid);
+        subscribeIncomingConnectionRequestHandler((local, remote, name) ->
+                EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectIncoming(local, remote, name))));
+        if (!subscribeIncomingConnectionRequest(puid, null)) {
+            LOGGER.error("Failed to subscribe");
+            IsRunningEOS = false;
+            reasonEOS = ReasonEOS.SUBSCRIBE_INCOMING_CONNECTION_FAILED;
+            return;
+        }
+        subscribeEstablishedConnectionRequestHandler((local, remote, name) ->
+                EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectEstablished(local, remote, name))));
+        if (!subscribeEstablishedConnectionRequest(puid, null)) {
+            LOGGER.error("Failed to subscribe");
+            IsRunningEOS = false;
+            reasonEOS = ReasonEOS.SUBSCRIBE_ESTABLISHED_CONNECTION_FAILED;
+            return;
+        }
+        subscribeInterruptConnectionRequestHandler((local, remote, name) ->
+                EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectInterrupt(local, remote, name))));
+        if (!subscribeInterruptConnectionRequest(puid, null)) {
+            LOGGER.error("Failed to subscribe");
+            IsRunningEOS = false;
+            reasonEOS = ReasonEOS.SUBSCRIBE_INTERRUPT_CONNECTION_FAILED;
+            return;
+        }
+        subscribeCloseConnectionRequestHandler((local, remote, name, reason) ->
+                EXECUTOR.accept(() -> MinecraftForge.EVENT_BUS.post(new ConnectClose(local, remote, name, reason))));
+        if (!subscribeCloseConnectionRequest(puid, null)) {
+            LOGGER.error("Failed to subscribe");
+            IsRunningEOS = false;
+            reasonEOS = ReasonEOS.SUBSCRIBE_CLOSE_CONNECTION_FAILED;
+            return;
+        }
+        registerReceiveCallbackFor(puid, (rid, sid, cid, data) -> {
+            ConnectionKey key = new ConnectionKey(rid, sid, cid);
+            @Nullable Set<PacketHandler> handlers = NetworkUtil.DATA_CALLBACKS.get(key);
+            if (handlers != null) {
+                for (PacketHandler handler: handlers) {
+                    handler.accept(data);
+                }
+            }
+        });
+
+        if (Config.CLOUDFLARE_ENABLED.get()) {
+            String key = EOSNative.getConnectionKey();
+            if (key != null) {
+                executor.submit(() -> CloudflareUpdater.updateRecord(
+                        Config.CLOUDFLARE_API_TOKEN.get(),
+                        Config.CLOUDFLARE_ZONE_ID.get(),
+                        Config.CLOUDFLARE_DDNS_RECORD.get(),
+                        key
+                ));
+            } else {
+                LOGGER.warn("Cloudflare DDNS: connection key is null, cannot update");
+            }
+        }
+    }
+
+    private static void onPUIDFailed() {
+        IsRunningEOS = false;
+        LOGGER.error("Get PUID Failed, EOS shutdown");
+        if (SystemUtils.IS_OS_MAC) {
+            SET_ERROR_SCREEN.set(
+                    Component.translatable("gui.eosp2p." + reasonEOS.name().toLowerCase()),
+                    Component.translatable("gui.eosp2p.puid_fail_mac", Component.translatable("gui.eosp2p.puid_fail")),
+                    Component.translatable("gui.eosp2p.dismiss_ever"),
+                    Component.translatable("gui.eosp2p.dismiss")
+            );
+        } else {
+            SET_ERROR_SCREEN.set(
+                    Component.translatable("gui.eosp2p." + reasonEOS.name().toLowerCase()),
+                    Component.translatable("gui.eosp2p.puid_fail"),
+                    Component.translatable("gui.eosp2p.dismiss_ever"),
+                    Component.translatable("gui.eosp2p.dismiss")
+            );
+        }
+    }
+
+    private static void fetchPUIDWithRetry(int remaining) {
+        EOSNative.getPUID(FMLCommonSetupHandler::onPUIDSuccess, () -> {
+            if (remaining > 1) {
+                LOGGER.warn("Get PUID failed, retrying... ({} attempt(s) left)", remaining - 1);
+                EOSNative.resetPUIDInit();
+                executor.schedule(() -> fetchPUIDWithRetry(remaining - 1), 10, TimeUnit.SECONDS);
+            } else {
+                onPUIDFailed();
             }
         });
     }
